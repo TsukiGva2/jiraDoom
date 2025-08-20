@@ -14,10 +14,13 @@ typedef uint32_t u32;
 const u32 W = 800;
 const u32 H = 600;
 
-const float player_radius = 0.2f;
+const float player_radius = 0.4f;
 
 #define map_w 24
 #define map_h 24
+
+#define MIC_MUTED 0
+#define MIC_UNMUTED 1
 
 #define texture_pixels 64
 
@@ -58,6 +61,12 @@ Image     texture_map_pixel_data;
 
 Image     floor_canvas;
 Texture2D floor_canvas_render;
+
+Texture2D hand_overlay;
+
+Texture2D mic_ui;
+int mic_state;
+const u32 mic_ui_elem_size = 64;
 
 float mouse_yaw;
 
@@ -131,6 +140,46 @@ void update_player()
 	}
 }
 
+void draw_mic()
+{
+	int mic_texture_column = 0;
+	if (mic_state == MIC_UNMUTED)
+		mic_texture_column = mic_ui_elem_size;
+
+	Rectangle source = (Rectangle){
+		mic_texture_column, 0,
+		mic_ui_elem_size,
+		mic_ui_elem_size
+	};
+
+	Rectangle dest = (Rectangle){
+		W / 2 - mic_ui_elem_size / 2,
+		H - mic_ui_elem_size - 20,
+		mic_ui_elem_size,
+		mic_ui_elem_size
+	};
+
+	DrawTexturePro(
+			mic_ui,
+			source,
+			dest,
+			(Vector2){0},
+			0, WHITE
+	);
+}
+
+void draw_ui()
+{
+	DrawTexture(
+		hand_overlay,
+		W - hand_overlay.width,
+		H - hand_overlay.height,
+		WHITE
+	);
+
+	draw_mic();
+}
+
 void draw_floor()
 {
 	FOR(y, H)
@@ -154,27 +203,30 @@ void draw_floor()
 				Vector2Scale(ray_dir0, row_dist)
 		);
 
+		int tx, ty;
+		int cell_x, cell_y;
+
+		int ceiling_pos = H - y - 1;
+
 		FOR(x, W)
 		{
-			Vector2 cell = (Vector2){(int)floor.x, (int)floor.y};
+			cell_x = (int)floor.x;
+			cell_y = (int)floor.y;
 
-			int tx, ty;
 			tx = (int)
-				(texture_pixels * (floor.x - cell.x)) & (texture_pixels - 1);
+				(texture_pixels * (floor.x - cell_x)) & (texture_pixels - 1);
 			ty = (int)
-				(texture_pixels * (floor.y - cell.y)) & (texture_pixels - 1);
+				(texture_pixels * (floor.y - cell_y)) & (texture_pixels - 1);
 
 			floor = Vector2Add(floor, floor_step);
-
-			int floor_texture = 0;
 
 			Color floor_c = GetImageColor(texture_map_pixel_data,
 					1 * texture_pixels + tx, ty);
 			Color ceil_c = GetImageColor(texture_map_pixel_data,
-					3 * texture_pixels + tx, ty);
+					1 * texture_pixels + tx, ty);
 
 			ImageDrawPixel(&floor_canvas, x, y, floor_c);
-			ImageDrawPixel(&floor_canvas, x, H - y - 1, ceil_c);
+			ImageDrawPixel(&floor_canvas, x, ceiling_pos, ceil_c);
 		}
 	}
 
@@ -324,6 +376,8 @@ void draw_player()
 
 int main()
 {
+	mic_state = MIC_MUTED;
+
 	pos   = (Vector2){22.0, 12.0};
 	dir   = (Vector2){-1, 0};
 	plane = (Vector2){0, 0.66};
@@ -340,6 +394,10 @@ int main()
 
 	texture_map            = LoadTexture("assets/walltext.png");
 	texture_map_pixel_data = LoadImageFromTexture(texture_map);
+
+	mic_ui = LoadTexture("assets/mic_ui.png");
+
+	hand_overlay = LoadTexture("assets/hand_overlay.png");
 	
 	while (!WindowShouldClose())
 	{
@@ -352,11 +410,18 @@ int main()
 			draw_floor();
 			draw_player();
 
+			draw_ui();
+
 		EndDrawing();
 	}
 
+	UnloadImage(floor_canvas);
 	UnloadImage(texture_map_pixel_data);
+
+	UnloadTexture(mic_ui);
+	UnloadTexture(hand_overlay);
 	UnloadTexture(texture_map);
+	UnloadTexture(floor_canvas_render);
 
 	CloseWindow();
 }
