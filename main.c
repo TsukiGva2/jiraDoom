@@ -156,7 +156,7 @@ void draw_floor()
 
 		FOR(x, W)
 		{
-			Vector2 cell = (Vector2){floorf(floor.x), floorf(floor.y)};
+			Vector2 cell = (Vector2){(int)floor.x, (int)floor.y};
 
 			int tx, ty;
 			tx = (int)
@@ -168,10 +168,13 @@ void draw_floor()
 
 			int floor_texture = 0;
 
-			Color c = GetImageColor(texture_map_pixel_data, tx, ty);
+			Color floor_c = GetImageColor(texture_map_pixel_data,
+					1 * texture_pixels + tx, ty);
+			Color ceil_c = GetImageColor(texture_map_pixel_data,
+					3 * texture_pixels + tx, ty);
 
-			ImageDrawPixel(&floor_canvas, x, y, c);
-			ImageDrawPixel(&floor_canvas, x, H - y - 1, c);
+			ImageDrawPixel(&floor_canvas, x, y, floor_c);
+			ImageDrawPixel(&floor_canvas, x, H - y - 1, ceil_c);
 		}
 	}
 
