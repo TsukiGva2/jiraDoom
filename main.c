@@ -57,12 +57,12 @@ Vector2   pos;
 Vector2   dir;
 Vector2 plane;
 
-Shader shader;
-int res_loc;
-int pos_loc;
-int dir_loc;
-int plane_loc;
-int mic_state_loc;
+Shader floor_shader;
+int floor_res_loc;
+int floor_pos_loc;
+int floor_dir_loc;
+int floor_plane_loc;
+int floor_mic_state_loc;
 
 Texture2D texture_map;
 
@@ -196,11 +196,22 @@ void draw_ui()
 
 void draw_floor()
 {
-	BeginShaderMode(shader);
-	Rectangle source = { 0.0f, 0.0f, (float)texture_map.width, (float)texture_map.height };
-	Rectangle dest = { 0.0f, 0.0f, (float)W, (float)H };
-	Vector2 origin = { 0.0f, 0.0f };
-	DrawTexturePro(texture_map, source, dest, origin, 0.0f, WHITE);
+	BeginShaderMode(floor_shader);
+
+	Rectangle source =
+	(Rectangle){
+		0.0f, 0.0f,
+		texture_map.width,
+		texture_map.height
+	};
+	
+	Rectangle dest =
+	(Rectangle){
+		0.0f, 0.0f,
+		W, H
+	};
+
+	DrawTexturePro(texture_map, source, dest, (Vector2){0}, 0.0f, WHITE);
 	EndShaderMode();
 }
 
@@ -363,24 +374,30 @@ int main()
 	texture_map = LoadTexture("assets/walltext.png");
 	hand_overlay = LoadTexture("assets/hand_overlay.png");
 
-	shader        = LoadShader(0, "floor.fs");
-    res_loc       = GetShaderLocation(shader, "resolution");
-    pos_loc       = GetShaderLocation(shader, "playerPos");
-    dir_loc       = GetShaderLocation(shader, "playerDir");
-    plane_loc     = GetShaderLocation(shader, "cameraPlane");
-    mic_state_loc = GetShaderLocation(shader, "micState");
+	floor_shader        = LoadShader(0, "floor.fs");
+    floor_res_loc       = GetShaderLocation(floor_shader, "resolution");
+    floor_pos_loc       = GetShaderLocation(floor_shader, "playerPos");
+    floor_dir_loc       = GetShaderLocation(floor_shader, "playerDir");
+    floor_plane_loc     = GetShaderLocation(floor_shader, "cameraPlane");
+    floor_mic_state_loc = GetShaderLocation(floor_shader, "micState");
 	
 	float resolution[2] = { W, H };
-	SetShaderValue(shader, res_loc, resolution, SHADER_UNIFORM_VEC2);
+	SetShaderValue(
+			floor_shader, floor_res_loc, resolution, SHADER_UNIFORM_VEC2);
 
 	while (!WindowShouldClose())
 	{
 		update_player();
 
-		SetShaderValue(shader, pos_loc, &pos, SHADER_UNIFORM_VEC2);
-        SetShaderValue(shader, dir_loc, &dir, SHADER_UNIFORM_VEC2);
-        SetShaderValue(shader, plane_loc, &plane, SHADER_UNIFORM_VEC2);
-        SetShaderValue(shader, mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
+		SetShaderValue(
+				floor_shader, floor_pos_loc, &pos, SHADER_UNIFORM_VEC2);
+        SetShaderValue(
+				floor_shader, floor_dir_loc, &dir, SHADER_UNIFORM_VEC2);
+        SetShaderValue(
+				floor_shader, floor_plane_loc, &plane, SHADER_UNIFORM_VEC2);
+        SetShaderValue(
+				floor_shader,
+				floor_mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
 
 		BeginDrawing();
 			
@@ -395,7 +412,7 @@ int main()
 		EndDrawing();
 	}
 
-	UnloadShader(shader);
+	UnloadShader(floor_shader);
 	UnloadTexture(mic_ui);
 	UnloadTexture(hand_overlay);
 	UnloadTexture(texture_map);
