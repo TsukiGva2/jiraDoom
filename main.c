@@ -57,11 +57,14 @@ Vector2   pos;
 Vector2   dir;
 Vector2 plane;
 
-Texture2D texture_map;
-Image     texture_map_pixel_data;
+Shader shader;
+int res_loc;
+int pos_loc;
+int dir_loc;
+int plane_loc;
+int mic_state_loc;
 
-Image     floor_canvas;
-Texture2D floor_canvas_render;
+Texture2D texture_map;
 
 Texture2D hand_overlay;
 
@@ -193,74 +196,12 @@ void draw_ui()
 
 void draw_floor()
 {
-	FOR(y, H)
-	{
-		Vector2 ray_dir0 = Vector2Subtract(dir, plane);
-		Vector2 ray_dir1 = Vector2Add(dir, plane);
-
-		int p = y - H / 2;
-
-		float pos_z = .5f * H;
-		float row_dist = pos_z / p;
-
-		Vector2 floor_step =
-			Vector2Scale(
-					Vector2Scale(Vector2Subtract(ray_dir1, ray_dir0), 1.0f / W),
-					row_dist
-			);
-
-		Vector2 floor = Vector2Add(
-				pos,
-				Vector2Scale(ray_dir0, row_dist)
-		);
-
-		int tx, ty;
-		int cell_x, cell_y;
-	
-		int ceiling_pos = H - y - 1;
-
-		const Color* floor_data = (Color*)(texture_map_pixel_data.data);
-		int atlas_width = texture_map_pixel_data.width;
-
-		Color* canvas = (Color*)floor_canvas.data;
-
-		int floor_index, ceil_index;
-
-		FOR(x, W)
-		{
-			cell_x = (int)floor.x;
-			cell_y = (int)floor.y;
-
-			tx = (int)
-				(texture_pixels * (floor.x - cell_x)) & (texture_pixels - 1);
-			ty = (int)
-				(texture_pixels * (floor.y - cell_y)) & (texture_pixels - 1);
-
-			floor = Vector2Add(floor, floor_step);
-
-			floor_index = ty * atlas_width + (1 * texture_pixels + tx);
-			ceil_index = ty * atlas_width + (1 * texture_pixels + tx);
-
-			Color floor_c = floor_data[floor_index];
-			Color ceil_c = floor_data[ceil_index];
-
-			float dist_to_player = Vector2Distance(pos, floor);
-
-			if (mic_state == MIC_UNMUTED && dist_to_player <= mic_radius)
-			{
-				Color aura_color = (Color){0, 255, 0, 70};
-				floor_c = ColorAlphaBlend(floor_c, aura_color, WHITE);
-			}
-
-			canvas[y * W + x] = floor_c;
-			canvas[ceiling_pos * W + x] = ceil_c;
-		}
-
-
-	}
-
-	UpdateTexture(floor_canvas_render, floor_canvas.data);
-	DrawTexture(floor_canvas_render, 0, 0, WHITE);
+	BeginShaderMode(shader);
+	Rectangle source = { 0.0f, 0.0f, (float)texture_map.width, (float)texture_map.height };
+	Rectangle dest = { 0.0f, 0.0f, (float)W, (float)H };
+	Vector2 origin = { 0.0f, 0.0f };
+	DrawTexturePro(texture_map, source, dest, origin, 0.0f, WHITE);
+	EndShaderMode();
 }
 
 void draw_player()
@@ -418,25 +359,35 @@ int main()
 	DisableCursor();
 	SetMousePosition(W / 2, H / 2);
 
-	floor_canvas        = GenImageColor(W, H, WHITE);
-	floor_canvas_render = LoadTextureFromImage(floor_canvas);
-
-	texture_map            = LoadTexture("assets/walltext.png");
-	texture_map_pixel_data = LoadImageFromTexture(texture_map);
-
 	mic_ui = LoadTexture("assets/mic_ui.png");
-
+	texture_map = LoadTexture("assets/walltext.png");
 	hand_overlay = LoadTexture("assets/hand_overlay.png");
+
+	shader        = LoadShader(0, "floor.fs");
+    res_loc       = GetShaderLocation(shader, "resolution");
+    pos_loc       = GetShaderLocation(shader, "playerPos");
+    dir_loc       = GetShaderLocation(shader, "playerDir");
+    plane_loc     = GetShaderLocation(shader, "cameraPlane");
+    mic_state_loc = GetShaderLocation(shader, "micState");
 	
+	float resolution[2] = { W, H };
+	SetShaderValue(shader, res_loc, resolution, SHADER_UNIFORM_VEC2);
+
 	while (!WindowShouldClose())
 	{
 		update_player();
+
+		SetShaderValue(shader, pos_loc, &pos, SHADER_UNIFORM_VEC2);
+        SetShaderValue(shader, dir_loc, &dir, SHADER_UNIFORM_VEC2);
+        SetShaderValue(shader, plane_loc, &plane, SHADER_UNIFORM_VEC2);
+        SetShaderValue(shader, mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
 
 		BeginDrawing();
 			
 			ClearBackground(WHITE);
 
 			draw_floor();
+
 			draw_player();
 
 			draw_ui();
@@ -444,13 +395,10 @@ int main()
 		EndDrawing();
 	}
 
-	UnloadImage(floor_canvas);
-	UnloadImage(texture_map_pixel_data);
-
+	UnloadShader(shader);
 	UnloadTexture(mic_ui);
 	UnloadTexture(hand_overlay);
 	UnloadTexture(texture_map);
-	UnloadTexture(floor_canvas_render);
 
 	CloseWindow();
 }
