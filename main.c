@@ -15,6 +15,7 @@ const u32 W = 800;
 const u32 H = 600;
 
 const float player_radius = 0.4f;
+const float mic_radius = 1.5f;
 
 #define map_w 24
 #define map_h 24
@@ -84,6 +85,12 @@ void update_mouse()
 
 void update_player()
 {
+	if (IsKeyPressed(KEY_R))
+	{
+		if (mic_state == MIC_MUTED) mic_state = MIC_UNMUTED;
+		else mic_state = MIC_MUTED;
+	}
+
 	update_mouse();
 
 	dir = Vector2Rotate(dir, -mouse_yaw);
@@ -170,10 +177,14 @@ void draw_mic()
 
 void draw_ui()
 {
+	int bob =
+		(int)(fabs(sin(Vector2Distance(pos, (Vector2){0}))) * 20);
+
 	DrawTexture(
 		hand_overlay,
+		// view bobbing
 		W - hand_overlay.width,
-		H - hand_overlay.height,
+		H - hand_overlay.height + bob,
 		WHITE
 	);
 
@@ -205,8 +216,15 @@ void draw_floor()
 
 		int tx, ty;
 		int cell_x, cell_y;
-
+	
 		int ceiling_pos = H - y - 1;
+
+		const Color* floor_data = (Color*)(texture_map_pixel_data.data);
+		int atlas_width = texture_map_pixel_data.width;
+
+		Color* canvas = (Color*)floor_canvas.data;
+
+		int floor_index, ceil_index;
 
 		FOR(x, W)
 		{
@@ -220,14 +238,25 @@ void draw_floor()
 
 			floor = Vector2Add(floor, floor_step);
 
-			Color floor_c = GetImageColor(texture_map_pixel_data,
-					1 * texture_pixels + tx, ty);
-			Color ceil_c = GetImageColor(texture_map_pixel_data,
-					1 * texture_pixels + tx, ty);
+			floor_index = ty * atlas_width + (1 * texture_pixels + tx);
+			ceil_index = ty * atlas_width + (1 * texture_pixels + tx);
 
-			ImageDrawPixel(&floor_canvas, x, y, floor_c);
-			ImageDrawPixel(&floor_canvas, x, ceiling_pos, ceil_c);
+			Color floor_c = floor_data[floor_index];
+			Color ceil_c = floor_data[ceil_index];
+
+			float dist_to_player = Vector2Distance(pos, floor);
+
+			if (mic_state == MIC_UNMUTED && dist_to_player <= mic_radius)
+			{
+				Color aura_color = (Color){0, 255, 0, 70};
+				floor_c = ColorAlphaBlend(floor_c, aura_color, WHITE);
+			}
+
+			canvas[y * W + x] = floor_c;
+			canvas[ceiling_pos * W + x] = ceil_c;
 		}
+
+
 	}
 
 	UpdateTexture(floor_canvas_render, floor_canvas.data);
