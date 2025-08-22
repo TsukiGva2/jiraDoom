@@ -110,10 +110,10 @@ void init_floor()
 {
 	floor_shader        = LoadShader(0, "floor.fs");
     floor_res_loc       = GetShaderLocation(floor_shader, "resolution");
-    floor_pos_loc       = GetShaderLocation(floor_shader, "playerPos");
-    floor_dir_loc       = GetShaderLocation(floor_shader, "playerDir");
-    floor_plane_loc     = GetShaderLocation(floor_shader, "cameraPlane");
-    floor_mic_state_loc = GetShaderLocation(floor_shader, "micState");
+    floor_pos_loc       = GetShaderLocation(floor_shader, "player_pos");
+    floor_dir_loc       = GetShaderLocation(floor_shader, "player_dir");
+    floor_plane_loc     = GetShaderLocation(floor_shader, "camera_plane");
+    floor_mic_state_loc = GetShaderLocation(floor_shader, "mic_state");
 
 	float resolution[2] = { W, H };
 	SetShaderValue(

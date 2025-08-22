@@ -2,12 +2,15 @@
 
 in vec2 fragTexCoord;
 
+uniform int mic_state;
+
 uniform vec2 resolution;
-uniform vec2 playerPos;
-uniform vec2 playerDir;
-uniform vec2 cameraPlane;
-uniform sampler2D textureMap;
-uniform int micState;
+
+uniform vec2 player_pos;
+uniform vec2 player_dir;
+uniform vec2 camera_plane;
+
+uniform sampler2D texture_map;
 
 out vec4 finalColor;
 
@@ -17,11 +20,11 @@ void main()
 {
     float y_coord = fragTexCoord.y - 0.5;
 
-    bool isCeiling = y_coord < 0.0;
+    bool is_ceiling = y_coord < 0.0;
 
     float p = y_coord * resolution.y;
 
-    if (isCeiling) {
+    if (is_ceiling) {
         p = -p;
     }
 
@@ -29,32 +32,32 @@ void main()
         discard;
     }
 
-    vec2 rayDir0 = playerDir - cameraPlane;
-    vec2 rayDir1 = playerDir + cameraPlane;
+    vec2 ray_dir0 = player_dir - camera_plane;
+    vec2 ray_dir1 = player_dir + camera_plane;
 
-    float posZ = 0.5 * resolution.y;
-    float rowDistance = posZ / p;
+    float pos_z = 0.5 * resolution.y;
+    float row_distance = pos_z / p;
 
-    vec2 floorStep = (rayDir1 - rayDir0) * (rowDistance / resolution.x);
-    vec2 floorPos = playerPos + rayDir0 * rowDistance;
-    floorPos += floorStep * gl_FragCoord.x;
+    vec2 floor_step = (ray_dir1 - ray_dir0) * (row_distance / resolution.x);
+    vec2 floor_pos = player_pos + ray_dir0 * row_distance;
+    floor_pos += floor_step * gl_FragCoord.x;
 
-    vec2 textureCoord = fract(floorPos);
-    vec2 samplePos = vec2((textureCoord.x + 1.0) / 8.0, textureCoord.y);
-    vec4 texColor = texture(textureMap, samplePos);
+    vec2 texture_coord = fract(floor_pos);
+    vec2 sample_pos = vec2((texture_coord.x) / 5.0, texture_coord.y);
+    vec4 tex_color = texture(texture_map, sample_pos);
 
-    if (!isCeiling && micState == 1) {
-        float dist_sq = dot(playerPos - floorPos, playerPos - floorPos);
+    if (!is_ceiling && mic_state == 1) {
+        float dist_sq = dot(player_pos - floor_pos, player_pos - floor_pos);
         if (dist_sq <= MIC_RADIUS * MIC_RADIUS) {
-            vec3 auraColor = vec3(0.0, 1.0, 0.0);
-            float auraAlpha = 0.27;
-            texColor.rgb = mix(texColor.rgb, auraColor, auraAlpha);
+            vec3 aura_color = vec3(0.0, 1.0, 0.0);
+            float aura_alpha = 0.27;
+            tex_color.rgb = mix(tex_color.rgb, aura_color, aura_alpha);
         }
     }
 
-	float fogAmount = clamp(rowDistance / 15.0, 0.0, 1.0);
-    vec3 fogColor = vec3(0.0, 0.0, 0.0); // Fading to black
-    texColor.rgb = mix(texColor.rgb, fogColor, fogAmount);
+	float fog_amount = clamp(row_distance / 15.0, 0.0, 1.0);
+    vec3 fog_color = vec3(0.0, 0.0, 0.0);
+    tex_color.rgb = mix(tex_color.rgb, fog_color, fog_amount);
     
-    finalColor = texColor;
+    finalColor = tex_color;
 }
