@@ -53,10 +53,17 @@ int world_map[map_w][map_h] =
   {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 };
 
+// Player
+float     mouse_yaw;
 Vector2   pos;
 Vector2   dir;
-Vector2 plane;
+Vector2   plane;
+Texture2D hand_overlay;
 
+// Textures
+Texture2D texture_map;
+
+// Floor/Ceiling
 Shader floor_shader;
 int floor_res_loc;
 int floor_pos_loc;
@@ -64,15 +71,94 @@ int floor_dir_loc;
 int floor_plane_loc;
 int floor_mic_state_loc;
 
-Texture2D texture_map;
-
-Texture2D hand_overlay;
-
+// Mic
 Texture2D mic_ui;
-int mic_state;
+      int mic_state;
 const u32 mic_ui_elem_size = 64;
 
-float mouse_yaw;
+
+void init_window()
+{
+	InitWindow(W, H, "Jira Doom");
+	SetTargetFPS(60);
+	DisableCursor();
+	SetMousePosition(W / 2, H / 2);
+}
+
+void init_textures()
+{
+	mic_ui       = LoadTexture("assets/mic_ui.png");
+	texture_map  = LoadTexture("assets/walltext.png");
+	hand_overlay = LoadTexture("assets/hand_overlay.png");
+}
+
+void init_player()
+{
+	pos   = (Vector2){22.0, 12.0};
+	dir   = (Vector2){-1, 0};
+	plane = (Vector2){0, 0.66};
+}
+
+void init_mic()
+{
+	mic_state = MIC_MUTED;
+
+	// TODO: init mic lib
+}
+
+void init_floor()
+{
+	floor_shader        = LoadShader(0, "floor.fs");
+    floor_res_loc       = GetShaderLocation(floor_shader, "resolution");
+    floor_pos_loc       = GetShaderLocation(floor_shader, "playerPos");
+    floor_dir_loc       = GetShaderLocation(floor_shader, "playerDir");
+    floor_plane_loc     = GetShaderLocation(floor_shader, "cameraPlane");
+    floor_mic_state_loc = GetShaderLocation(floor_shader, "micState");
+
+	float resolution[2] = { W, H };
+	SetShaderValue(
+			floor_shader, floor_res_loc, resolution, SHADER_UNIFORM_VEC2);
+}
+
+void clean_mic()
+{
+	// TODO: clean up mic lib
+}
+
+void clean_floor()
+{
+	UnloadShader(floor_shader);
+}
+
+void clean_player()
+{
+	// ...
+}
+
+void clean_textures()
+{
+	UnloadTexture(mic_ui);
+	UnloadTexture(hand_overlay);
+	UnloadTexture(texture_map);
+}
+
+void clean_window()
+{
+	CloseWindow();
+}
+
+void update_floor()
+{
+	SetShaderValue(
+			floor_shader, floor_pos_loc, &pos, SHADER_UNIFORM_VEC2);
+	SetShaderValue(
+			floor_shader, floor_dir_loc, &dir, SHADER_UNIFORM_VEC2);
+	SetShaderValue(
+			floor_shader, floor_plane_loc, &plane, SHADER_UNIFORM_VEC2);
+	SetShaderValue(
+			floor_shader,
+			floor_mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
+}
 
 void update_mouse()
 {
@@ -93,8 +179,6 @@ void update_player()
 		if (mic_state == MIC_MUTED) mic_state = MIC_UNMUTED;
 		else mic_state = MIC_MUTED;
 	}
-
-	update_mouse();
 
 	dir = Vector2Rotate(dir, -mouse_yaw);
 	plane = Vector2Rotate(plane, -mouse_yaw);
@@ -150,7 +234,7 @@ void update_player()
 	}
 }
 
-void draw_mic()
+void draw_ui_mic()
 {
 	int mic_texture_column = 0;
 	if (mic_state == MIC_UNMUTED)
@@ -178,7 +262,7 @@ void draw_mic()
 	);
 }
 
-void draw_ui()
+void draw_ui_hand()
 {
 	int bob =
 		(int)(fabs(sin(Vector2Distance(pos, (Vector2){0}))) * 20);
@@ -190,8 +274,6 @@ void draw_ui()
 		H - hand_overlay.height + bob,
 		WHITE
 	);
-
-	draw_mic();
 }
 
 void draw_floor()
@@ -355,49 +437,36 @@ void draw_player()
 	}
 }
 
+void draw_npcs()
+{
+}
+
+void draw_ui()
+{
+	draw_ui_hand();
+	draw_ui_mic();
+}
+
 int main()
 {
-	mic_state = MIC_MUTED;
+	init_window();
 
-	pos   = (Vector2){22.0, 12.0};
-	dir   = (Vector2){-1, 0};
-	plane = (Vector2){0, 0.66};
+	init_textures();
 
-	InitWindow(W, H, "Jira Doom");
+	init_player();
 
-	SetTargetFPS(60);
+	init_floor();
 
-	DisableCursor();
-	SetMousePosition(W / 2, H / 2);
-
-	mic_ui = LoadTexture("assets/mic_ui.png");
-	texture_map = LoadTexture("assets/walltext.png");
-	hand_overlay = LoadTexture("assets/hand_overlay.png");
-
-	floor_shader        = LoadShader(0, "floor.fs");
-    floor_res_loc       = GetShaderLocation(floor_shader, "resolution");
-    floor_pos_loc       = GetShaderLocation(floor_shader, "playerPos");
-    floor_dir_loc       = GetShaderLocation(floor_shader, "playerDir");
-    floor_plane_loc     = GetShaderLocation(floor_shader, "cameraPlane");
-    floor_mic_state_loc = GetShaderLocation(floor_shader, "micState");
+	init_mic();
 	
-	float resolution[2] = { W, H };
-	SetShaderValue(
-			floor_shader, floor_res_loc, resolution, SHADER_UNIFORM_VEC2);
 
 	while (!WindowShouldClose())
 	{
+		update_mouse();
+
 		update_player();
 
-		SetShaderValue(
-				floor_shader, floor_pos_loc, &pos, SHADER_UNIFORM_VEC2);
-        SetShaderValue(
-				floor_shader, floor_dir_loc, &dir, SHADER_UNIFORM_VEC2);
-        SetShaderValue(
-				floor_shader, floor_plane_loc, &plane, SHADER_UNIFORM_VEC2);
-        SetShaderValue(
-				floor_shader,
-				floor_mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
+		update_floor();
 
 		BeginDrawing();
 			
@@ -407,16 +476,23 @@ int main()
 
 			draw_player();
 
+			draw_npcs();
+
 			draw_ui();
 
 		EndDrawing();
 	}
 
-	UnloadShader(floor_shader);
-	UnloadTexture(mic_ui);
-	UnloadTexture(hand_overlay);
-	UnloadTexture(texture_map);
+	clean_mic();
 
-	CloseWindow();
+	clean_floor();
+
+	clean_player();
+
+	clean_textures();
+
+	clean_window();
+
+	return 0;
 }
 
