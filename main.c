@@ -1,21 +1,18 @@
-#include <raylib.h>
-#include <raymath.h>
+#include "raylib2d.h"
 #include <inttypes.h>
+#include <stddef.h>
+#include <stdlib.h>
 #include <math.h>
 
-#ifndef M_PI
-#    define M_PI 3.14159265358979323846
-#endif
+typedef uint32_t uint;
 
-typedef uint32_t u32;
+#define FOR(I, n) for(uint I=0;I<n;I++)
+#define FROM(I, v, n) for(uint I=v;I<n;I++)
 
-#define FOR(I, n) for(u32 I=0;I<n;I++)
-
-const u32 W = 800;
-const u32 H = 600;
-
-const float player_radius = 0.4f;
-const float mic_radius = 1.5f;
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
+const uint W = SCREEN_WIDTH;
+const uint H = SCREEN_HEIGHT;
 
 #define map_w 24
 #define map_h 24
@@ -53,7 +50,14 @@ int world_map[map_w][map_h] =
   {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 };
 
+// World
+float wall_distances[SCREEN_WIDTH];
+
 // Player
+const float bob_speed = 0.05;
+const float player_radius = 0.4f;
+
+float     steps;
 float     mouse_yaw;
 Vector2   pos;
 Vector2   dir;
@@ -72,10 +76,93 @@ int floor_plane_loc;
 int floor_mic_state_loc;
 
 // Mic
-Texture2D mic_ui;
-      int mic_state;
-const u32 mic_ui_elem_size = 64;
+const float mic_radius = 1.5f;
+Texture2D   mic_ui;
+      int   mic_state;
+const uint  mic_ui_elem_size = 64;
 
+// NPCs
+Texture2D npc_texture_map;
+#define npc_texture_pixels 64
+#define NPC_CAP 20
+struct NPC
+{
+	Vector2 pos;
+	float   distance;
+	int     texture_id;
+	int     npc_id;
+};
+typedef struct NPC NPC;
+int npc_count = 0;
+int npc_heap_size = 0;
+
+NPC  npcs[NPC_CAP]; // actual npc data
+NPC* npc_heap[NPC_CAP];
+NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
+
+void spawn_npc(NPC n)
+{
+	if (npc_count >= NPC_CAP)
+		return;
+
+	npcs[npc_count++] = n;
+}
+
+inline void swap_heap_npc(int i, int j)
+{
+	NPC* t;
+	t=npc_heap[i];
+	npc_heap[i]=npc_heap[j];
+	npc_heap[j]=t;
+}
+
+void insert_heap_npc(NPC* n)
+{
+#define PARENT(i) ((i - 1)/2)
+	int index = npc_heap_size++;
+	npc_heap[index] = n;
+
+	while (index > 0)
+	{
+		if (npc_heap[PARENT(index)]->distance > npc_heap[index]->distance)
+			break;
+
+        swap_heap_npc(index, PARENT(index));
+
+        index = PARENT(index);
+    }
+#undef PARENT
+}
+
+NPC* pop_heap_npc()
+{
+	if (npc_heap_size < 0) return NULL;
+	return npc_heap[npc_heap_size--];
+}
+
+// heapsort
+void sort_npcs()
+{
+	if (npc_count <= 0) return;
+
+	FOR (i, npc_count)
+		npcs[i].distance =
+			Vector2Distance(npcs[i].pos, pos);
+
+	npc_heap_size = 0;
+
+	FOR (i, npc_count)
+		insert_heap_npc(&npcs[i]);
+
+	npc_heap_size--;
+
+	NPC* n;
+	int i = 0;
+	while ((n = pop_heap_npc()) != NULL)
+	{
+		npc_list[i++] = n;
+	}
+}
 
 void init_window()
 {
@@ -87,9 +174,10 @@ void init_window()
 
 void init_textures()
 {
-	mic_ui       = LoadTexture("assets/mic_ui.png");
-	texture_map  = LoadTexture("assets/walltext.png");
-	hand_overlay = LoadTexture("assets/hand_overlay.png");
+	mic_ui          = LoadTexture("assets/mic_ui.png");
+	texture_map     = LoadTexture("assets/walltext.png");
+	hand_overlay    = LoadTexture("assets/hand_overlay.png");
+	npc_texture_map = LoadTexture("assets/mobtex.png");
 }
 
 void init_player()
@@ -120,6 +208,11 @@ void init_floor()
 			floor_shader, floor_res_loc, resolution, SHADER_UNIFORM_VEC2);
 }
 
+void init_npcs()
+{
+	npc_count = 0;
+}
+
 void clean_mic()
 {
 	// TODO: clean up mic lib
@@ -140,6 +233,7 @@ void clean_textures()
 	UnloadTexture(mic_ui);
 	UnloadTexture(hand_overlay);
 	UnloadTexture(texture_map);
+	UnloadTexture(npc_texture_map);
 }
 
 void clean_window()
@@ -186,9 +280,12 @@ void update_player()
 	float dt = GetFrameTime();
 	float move_speed = 4.0 * dt;
 
+	float imm_bob_speed = bob_speed;
+
 	if (IsKeyDown(KEY_LEFT_SHIFT))
 	{
 		move_speed *= 2;
+		imm_bob_speed *= 2;
 	}
 
 	Vector2 mov = Vector2Scale(dir, move_speed);
@@ -197,40 +294,47 @@ void update_player()
 	Vector2 mov_collision = Vector2Scale(dir, player_radius);
 	Vector2 strafe_collision = Vector2Scale(plane, player_radius);
 
+	Vector2 delta = {0.0f, 0.0f};
+	int moved = 0;
+
 	if (IsKeyDown(KEY_W))
 	{
-		if (world_map[(int)(pos.x + mov.x + mov_collision.x)][(int)pos.y] == 0)
-			pos.x += mov.x;
-
-		if (world_map[(int)pos.x][(int)(pos.y + mov.y + mov_collision.y)] == 0)
-			pos.y += mov.y;
+		delta.x += mov.x;
+		delta.y += mov.y;
+		moved = 1;
 	}
-
-	if (IsKeyDown(KEY_A))
-	{
-		if (world_map[(int)(pos.x - strafe.x - strafe_collision.x)][(int)pos.y] == 0)
-			pos.x -= strafe.x;
-
-		if (world_map[(int)pos.x][(int)(pos.y - strafe.y - strafe_collision.y)] == 0)
-			pos.y -= strafe.y;
-	}
-
 	if (IsKeyDown(KEY_S))
 	{
-		if (world_map[(int)(pos.x - mov.x - mov_collision.x)][(int)pos.y] == 0)
-			pos.x -= mov.x;
-
-		if (world_map[(int)pos.x][(int)(pos.y - mov.y - mov_collision.y)] == 0)
-			pos.y -= mov.y;
+		delta.x -= mov.x;
+		delta.y -= mov.y;
+		moved = 1;
 	}
-
 	if (IsKeyDown(KEY_D))
 	{
-		if (world_map[(int)(pos.x + strafe.x + strafe_collision.x)][(int)pos.y] == 0)
-			pos.x += strafe.x;
+		delta.x += strafe.x;
+		delta.y += strafe.y;
+		moved = 1;
+	}
+	if (IsKeyDown(KEY_A))
+	{
+		delta.x -= strafe.x;
+		delta.y -= strafe.y;
+		moved = 1;
+	}
 
-		if (world_map[(int)pos.x][(int)(pos.y + strafe.y + strafe_collision.y)] == 0)
-			pos.y += strafe.y;
+	if (moved) steps += imm_bob_speed;
+
+	float offset_x = (delta.x > 0) ? player_radius : -player_radius;
+	float offset_y = (delta.y > 0) ? player_radius : -player_radius;
+
+	if (world_map[(int)(pos.x + delta.x + offset_x)][(int)pos.y] == 0)
+	{
+		pos.x += delta.x;
+	}
+
+	if (world_map[(int)pos.x][(int)(pos.y + delta.y + offset_y)] == 0)
+	{
+		pos.y += delta.y;
 	}
 }
 
@@ -265,7 +369,7 @@ void draw_ui_mic()
 void draw_ui_hand()
 {
 	int bob =
-		(int)(fabs(sin(Vector2Distance(pos, (Vector2){0}))) * 20);
+		(int)(fabs(sin(steps)) * 8);
 
 	DrawTexture(
 		hand_overlay,
@@ -431,6 +535,8 @@ void draw_player()
 						0, WHITE
 				);
 
+				wall_distances[x] = perp_wall_dist;
+
 				hit = 1;
 			}
 		}
@@ -439,6 +545,76 @@ void draw_player()
 
 void draw_npcs()
 {
+	// https://lodev.org/cgtutor/raycasting3.html
+	FOR (i, npc_count)
+	{
+		NPC* npc = npc_list[i];
+
+		Vector2 sprite_pos = Vector2Subtract(npc->pos, pos);
+
+		float inv_det = 1.0f / (plane.x * dir.y - dir.x * plane.y);
+
+		float transform_x =
+			inv_det * (dir.y * sprite_pos.x - dir.x * sprite_pos.y);
+
+		float transform_y =
+			inv_det * (-plane.y * sprite_pos.x + plane.x * sprite_pos.y);
+
+		if (transform_y <= 0)
+			continue;
+
+		int sprite_screen_x =
+			(W / 2) * (1 + transform_x / transform_y);
+
+		int sprite_height = abs((int)(H / transform_y));
+		int sprite_width = abs((int)(H / transform_y));
+
+		int draw_start_y = -sprite_height / 2 + H / 2;
+		if (draw_start_y < 0) draw_start_y = 0;
+		int draw_end_y = sprite_height / 2 + H / 2;
+		if (draw_end_y >= H) draw_end_y = H - 1;
+
+		int draw_start_x = -sprite_width / 2 + sprite_screen_x;
+		if (draw_start_x < 0) draw_start_x = 0;
+		int draw_end_x = sprite_width / 2 + sprite_screen_x;
+		if (draw_end_x >= W) draw_end_x = W - 1;
+
+		FROM (stripe, draw_start_x, draw_end_x)
+		{
+			if (transform_y >= wall_distances[stripe])
+				continue;
+
+			int tex_x =
+			   	(stripe - (-sprite_width / 2 + sprite_screen_x))
+					* npc_texture_pixels / sprite_width;
+			
+			int texture_column =
+				(npc->texture_id * npc_texture_pixels) + tex_x;
+
+			Rectangle source = {
+				texture_column,
+				0.0f,
+				1.0f,
+				npc_texture_pixels
+			};
+
+			Rectangle dest = {
+				stripe,
+				draw_start_y,
+				1.0f,
+				(draw_end_y - draw_start_y)
+			};
+
+			DrawTexturePro(
+				npc_texture_map,
+				source,
+				dest,
+				(Vector2){0},
+				0,
+				WHITE
+			);
+		}
+	}
 }
 
 void draw_ui()
@@ -458,13 +634,24 @@ int main()
 	init_floor();
 
 	init_mic();
-	
+
+	NPC n = (NPC)
+	{
+		(Vector2){15, 10},
+		0,
+		1,
+		0
+	};
+	spawn_npc(n);
 
 	while (!WindowShouldClose())
 	{
 		update_mouse();
 
 		update_player();
+
+		// sort npcs by distance
+		sort_npcs();
 
 		update_floor();
 
