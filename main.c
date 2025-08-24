@@ -8,6 +8,7 @@ typedef uint32_t uint;
 
 #define FOR(I, n) for(uint I=0;I<n;I++)
 #define FROM(I, v, n) for(uint I=v;I<n;I++)
+#define MIN(x,y) ((x)<(y)?(x):(y))
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -51,21 +52,21 @@ int world_map[map_w][map_h] =
 };
 
 // World
-float wall_distances[SCREEN_WIDTH];
+scalar wall_distances[SCREEN_WIDTH];
 
 // Player
-const float bob_speed = 0.05;
-const float player_radius = 0.4f;
+const scalar bob_speed = 0.05;
+const scalar player_radius = 0.4f;
 
-float     steps;
-float     mouse_yaw;
-Vector2   pos;
-Vector2   dir;
-Vector2   plane;
-Texture2D hand_overlay;
+scalar     steps;
+scalar     mouse_yaw;
+vec       pos;
+vec       dir;
+vec       plane;
+tex hand_overlay;
 
 // Textures
-Texture2D texture_map;
+tex texture_map;
 
 // Floor/Ceiling
 Shader floor_shader;
@@ -76,21 +77,21 @@ int floor_plane_loc;
 int floor_mic_state_loc;
 
 // Mic
-const float mic_radius = 1.5f;
-Texture2D   mic_ui;
-      int   mic_state;
-const uint  mic_ui_elem_size = 64;
+const scalar mic_radius = 1.5f;
+      tex    mic_ui;
+      int    mic_state;
+const uint   mic_ui_elem_size = 64;
 
 // NPCs
-Texture2D npc_texture_map;
+tex npc_texture_map;
 #define npc_texture_pixels 64
 #define NPC_CAP 20
 struct NPC
 {
-	Vector2 pos;
-	float   distance;
-	int     texture_id;
-	int     npc_id;
+	vec   pos;
+	scalar distance;
+	int   texture_id;
+	int   npc_id;
 };
 typedef struct NPC NPC;
 int npc_count = 0;
@@ -147,7 +148,7 @@ void sort_npcs()
 
 	FOR (i, npc_count)
 		npcs[i].distance =
-			Vector2Distance(npcs[i].pos, pos);
+			vec_dist(npcs[i].pos, pos);
 
 	npc_heap_size = 0;
 
@@ -182,9 +183,9 @@ void init_textures()
 
 void init_player()
 {
-	pos   = (Vector2){22.0, 12.0};
-	dir   = (Vector2){-1, 0};
-	plane = (Vector2){0, 0.66};
+	pos   = VEC(22.0, 12.0);
+	dir   = VEC(-1, 0);
+	plane = VEC(0, 0.66);
 }
 
 void init_mic()
@@ -203,7 +204,7 @@ void init_floor()
     floor_plane_loc     = GetShaderLocation(floor_shader, "camera_plane");
     floor_mic_state_loc = GetShaderLocation(floor_shader, "mic_state");
 
-	float resolution[2] = { W, H };
+	scalar resolution[2] = { W, H };
 	SetShaderValue(
 			floor_shader, floor_res_loc, resolution, SHADER_UNIFORM_VEC2);
 }
@@ -256,10 +257,10 @@ void update_floor()
 
 void update_mouse()
 {
-	Vector2 mouse_pos = GetMousePosition();
+	vec mouse_pos = GetMousePosition();
 
-	float delta_x = mouse_pos.x - W / 2;
-	float sensitivity = 0.003;
+	scalar delta_x = mouse_pos.x - W / 2;
+	scalar sensitivity = 0.003;
 
 	mouse_yaw = delta_x * sensitivity;
 
@@ -274,13 +275,13 @@ void update_player()
 		else mic_state = MIC_MUTED;
 	}
 
-	dir = Vector2Rotate(dir, -mouse_yaw);
-	plane = Vector2Rotate(plane, -mouse_yaw);
+	dir = vec_rot(dir, -mouse_yaw);
+	plane = vec_rot(plane, -mouse_yaw);
 
-	float dt = GetFrameTime();
-	float move_speed = 4.0 * dt;
+	scalar dt = GetFrameTime();
+	scalar move_speed = 4.0 * dt;
 
-	float imm_bob_speed = bob_speed;
+	scalar imm_bob_speed = bob_speed;
 
 	if (IsKeyDown(KEY_LEFT_SHIFT))
 	{
@@ -288,13 +289,13 @@ void update_player()
 		imm_bob_speed *= 2;
 	}
 
-	Vector2 mov = Vector2Scale(dir, move_speed);
-	Vector2 strafe = Vector2Scale(plane, move_speed);
+	vec mov = vec_scale(dir, move_speed);
+	vec strafe = vec_scale(plane, move_speed);
 
-	Vector2 mov_collision = Vector2Scale(dir, player_radius);
-	Vector2 strafe_collision = Vector2Scale(plane, player_radius);
+	vec mov_collision = vec_scale(dir, player_radius);
+	vec strafe_collision = vec_scale(plane, player_radius);
 
-	Vector2 delta = {0.0f, 0.0f};
+	vec delta = {0.0f, 0.0f};
 	int moved = 0;
 
 	if (IsKeyDown(KEY_W))
@@ -324,8 +325,8 @@ void update_player()
 
 	if (moved) steps += imm_bob_speed;
 
-	float offset_x = (delta.x > 0) ? player_radius : -player_radius;
-	float offset_y = (delta.y > 0) ? player_radius : -player_radius;
+	scalar offset_x = (delta.x > 0) ? player_radius : -player_radius;
+	scalar offset_y = (delta.y > 0) ? player_radius : -player_radius;
 
 	if (world_map[(int)(pos.x + delta.x + offset_x)][(int)pos.y] == 0)
 	{
@@ -344,13 +345,13 @@ void draw_ui_mic()
 	if (mic_state == MIC_UNMUTED)
 		mic_texture_column = mic_ui_elem_size;
 
-	Rectangle source = (Rectangle){
+	rect source = (rect){
 		mic_texture_column, 0,
 		mic_ui_elem_size,
 		mic_ui_elem_size
 	};
 
-	Rectangle dest = (Rectangle){
+	rect dest = (rect){
 		W / 2 - mic_ui_elem_size / 2,
 		H - mic_ui_elem_size - 20,
 		mic_ui_elem_size,
@@ -361,7 +362,7 @@ void draw_ui_mic()
 			mic_ui,
 			source,
 			dest,
-			(Vector2){0},
+			VEC(0,0),
 			0, WHITE
 	);
 }
@@ -384,20 +385,20 @@ void draw_floor()
 {
 	BeginShaderMode(floor_shader);
 
-	Rectangle source =
-	(Rectangle){
+	rect source =
+	(rect){
 		0.0f, 0.0f,
 		texture_map.width,
 		texture_map.height
 	};
 	
-	Rectangle dest =
-	(Rectangle){
+	rect dest =
+	(rect){
 		0.0f, 0.0f,
 		W, H
 	};
 
-	DrawTexturePro(texture_map, source, dest, (Vector2){0}, 0.0f, WHITE);
+	DrawTexturePro(texture_map, source, dest, VEC(0,0), 0.0f, WHITE);
 	EndShaderMode();
 }
 
@@ -407,24 +408,24 @@ void draw_player()
 	{
 		// makes the center of screen 0
 		// right side 1, and left side -1
-		Vector2 angle_vec = Vector2Scale(plane, 2 * x / (float) W - 1);
-		Vector2 ray_dir = Vector2Add(dir, angle_vec);
+		vec angle_vec = vec_scale(plane, 2 * x / (scalar) W - 1);
+		vec ray_dir = vec_add(dir, angle_vec);
 
 		// integer part of position
-		Vector2 map_pos = (Vector2){
+		vec map_pos = (vec){
 			floorf(pos.x), floorf(pos.y)
 		};
 
-		Vector2 delta_dist = (Vector2){
+		vec delta_dist = (vec){
 			ray_dir.x == 0 ? 1e30 : fabs(1 / ray_dir.x),
 			ray_dir.y == 0 ? 1e30 : fabs(1 / ray_dir.y)
 		};
 
-		Vector2 side_dist;
+		vec side_dist;
 
-		float perp_wall_dist;
+		scalar perp_wall_dist;
 
-		Vector2 step = (Vector2){0, 0};
+		vec step = VEC(0, 0);
 
 		int side;
 		int hit = 0;
@@ -481,19 +482,19 @@ void draw_player()
 				int draw_start = -line_height / 2 + H / 2;
 				int draw_end = line_height / 2 + H / 2;
 
-				float texture_y_adjusted = 0.0f;
+				scalar texture_y_adjusted = 0.0f;
 
 				if (draw_start < 0)
 				{
 					texture_y_adjusted = -draw_start *
-						(texture_pixels / (float)line_height);
+						(texture_pixels / (scalar)line_height);
 					draw_start = 0;
 				}
 
 				if (draw_end >= H)
 					draw_end = H;
 
-				float wall_column;
+				scalar wall_column;
 
 				if (side == 0)
 					wall_column = pos.y + perp_wall_dist * ray_dir.y;
@@ -502,7 +503,7 @@ void draw_player()
 				wall_column -= floorf(wall_column);
 
 				int texture_offset =
-					(int)(wall_column * (float)texture_pixels);
+					(int)(wall_column * (scalar)texture_pixels);
 				
 				if (side == 0 && ray_dir.x > 0)
 					texture_offset = texture_pixels - texture_offset - 1;
@@ -512,16 +513,16 @@ void draw_player()
 				int texture_column =
 					texture_id * texture_pixels + texture_offset;
 
-				Rectangle source = (Rectangle){
-					(float)texture_column,
+				rect source = (rect){
+					(scalar)texture_column,
 					texture_y_adjusted,
 					1.0f,
-					((float)(draw_end - draw_start) / (float)line_height) *
-						(float)texture_pixels
+					((scalar)(draw_end - draw_start) / (scalar)line_height) *
+						(scalar)texture_pixels
 				};
 
 				// our scaling factor
-				Rectangle dest = (Rectangle){
+				rect dest = (rect){
 					x, draw_start,
 					1,
 					(draw_end - draw_start)
@@ -531,7 +532,7 @@ void draw_player()
 						texture_map,
 						source,
 						dest,
-						(Vector2){0},
+						VEC(0,0),
 						0, WHITE
 				);
 
@@ -550,14 +551,14 @@ void draw_npcs()
 	{
 		NPC* npc = npc_list[i];
 
-		Vector2 sprite_pos = Vector2Subtract(npc->pos, pos);
+		vec sprite_pos = vec_sub(npc->pos, pos);
 
-		float inv_det = 1.0f / (plane.x * dir.y - dir.x * plane.y);
+		scalar inv_det = 1.0f / (plane.x * dir.y - dir.x * plane.y);
 
-		float transform_x =
+		scalar transform_x =
 			inv_det * (dir.y * sprite_pos.x - dir.x * sprite_pos.y);
 
-		float transform_y =
+		scalar transform_y =
 			inv_det * (-plane.y * sprite_pos.x + plane.x * sprite_pos.y);
 
 		if (transform_y <= 0)
@@ -567,7 +568,7 @@ void draw_npcs()
 			(W / 2) * (1 + transform_x / transform_y);
 
 		int sprite_height = abs((int)(H / transform_y));
-		int sprite_width = abs((int)(H / transform_y));
+		int sprite_width = MIN(2000,abs((int)(H / transform_y)));
 
 		int draw_start_y = -sprite_height / 2 + H / 2;
 		if (draw_start_y < 0) draw_start_y = 0;
@@ -578,6 +579,8 @@ void draw_npcs()
 		if (draw_start_x < 0) draw_start_x = 0;
 		int draw_end_x = sprite_width / 2 + sprite_screen_x;
 		if (draw_end_x >= W) draw_end_x = W - 1;
+
+		if (sprite_screen_x < -sprite_width / 2) continue;
 
 		FROM (stripe, draw_start_x, draw_end_x)
 		{
@@ -591,14 +594,14 @@ void draw_npcs()
 			int texture_column =
 				(npc->texture_id * npc_texture_pixels) + tex_x;
 
-			Rectangle source = {
+			rect source = {
 				texture_column,
 				0.0f,
 				1.0f,
 				npc_texture_pixels
 			};
 
-			Rectangle dest = {
+			rect dest = {
 				stripe,
 				draw_start_y,
 				1.0f,
@@ -609,7 +612,7 @@ void draw_npcs()
 				npc_texture_map,
 				source,
 				dest,
-				(Vector2){0},
+				VEC(0,0),
 				0,
 				WHITE
 			);
@@ -637,7 +640,7 @@ int main()
 
 	NPC n = (NPC)
 	{
-		(Vector2){15, 10},
+		VEC(15, 10),
 		0,
 		1,
 		0
