@@ -58,11 +58,11 @@ scalar wall_distances[SCREEN_WIDTH];
 const scalar bob_speed = 0.05;
 const scalar player_radius = 0.4f;
 
-scalar     steps;
-scalar     mouse_yaw;
-vec       pos;
-vec       dir;
-vec       plane;
+scalar steps;
+scalar mouse_yaw;
+vec    pos;
+vec    dir;
+vec    plane;
 tex hand_overlay;
 
 // Textures
@@ -90,8 +90,9 @@ struct NPC
 {
 	vec   pos;
 	scalar distance;
-	int   texture_id;
-	int   npc_id;
+	scalar radius;
+	int    texture_id;
+	int    npc_id;
 };
 typedef struct NPC NPC;
 int npc_count = 0;
@@ -162,6 +163,26 @@ void sort_npcs()
 	while ((n = pop_heap_npc()) != NULL)
 	{
 		npc_list[i++] = n;
+	}
+}
+
+inline int world_at(vec spot)
+{
+	return world_map[(int)spot.x][(int)spot.y];
+}
+
+void check_npc_collision(vec move_end)
+{
+	FOR (i, npc_count)
+	{
+		NPC* npc = npc_list[i];
+
+		vec dist = vec_sub(npc->pos, move_end);
+
+		if (dist.x*dist.x + dist.y*dist.y <= npc->radius*npc->radius)
+		{
+			// do something
+		}
 	}
 }
 
@@ -300,40 +321,46 @@ void update_player()
 
 	if (IsKeyDown(KEY_W))
 	{
-		delta.x += mov.x;
-		delta.y += mov.y;
+		delta = vec_add(delta, mov);
 		moved = 1;
 	}
 	if (IsKeyDown(KEY_S))
 	{
-		delta.x -= mov.x;
-		delta.y -= mov.y;
+		delta = vec_sub(delta, mov);
 		moved = 1;
 	}
 	if (IsKeyDown(KEY_D))
 	{
-		delta.x += strafe.x;
-		delta.y += strafe.y;
+		delta = vec_add(delta, strafe);
 		moved = 1;
 	}
 	if (IsKeyDown(KEY_A))
 	{
-		delta.x -= strafe.x;
-		delta.y -= strafe.y;
+		delta = vec_sub(delta, strafe);
 		moved = 1;
 	}
 
 	if (moved) steps += imm_bob_speed;
 
-	scalar offset_x = (delta.x > 0) ? player_radius : -player_radius;
-	scalar offset_y = (delta.y > 0) ? player_radius : -player_radius;
+	vec offset = VEC
+	(
+			(delta.x > 0) ? player_radius : -player_radius,
+			(delta.y > 0) ? player_radius : -player_radius
+	);
 
-	if (world_map[(int)(pos.x + delta.x + offset_x)][(int)pos.y] == 0)
+	vec move_end = vec_add(vec_add(pos, delta), offset);
+
+	int move_x = 0;
+	int move_y = 0;
+
+	check_npc_collision(move_end);
+
+	if (world_at(VEC(move_end.x, pos.y)) == 0)
 	{
 		pos.x += delta.x;
 	}
 
-	if (world_map[(int)pos.x][(int)(pos.y + delta.y + offset_y)] == 0)
+	if (world_at(VEC(pos.x, move_end.y)) == 0)
 	{
 		pos.y += delta.y;
 	}
@@ -546,11 +573,11 @@ void draw_player()
 
 void draw_npcs()
 {
-	// https://lodev.org/cgtutor/raycasting3.html
 	FOR (i, npc_count)
 	{
 		NPC* npc = npc_list[i];
 
+		// https://lodev.org/cgtutor/raycasting3.html
 		vec sprite_pos = vec_sub(npc->pos, pos);
 
 		scalar inv_det = 1.0f / (plane.x * dir.y - dir.x * plane.y);
@@ -572,11 +599,11 @@ void draw_npcs()
 
 		int draw_start_y = -sprite_height / 2 + H / 2;
 		if (draw_start_y < 0) draw_start_y = 0;
-		int draw_end_y = sprite_height / 2 + H / 2;
-		if (draw_end_y >= H) draw_end_y = H - 1;
-
 		int draw_start_x = -sprite_width / 2 + sprite_screen_x;
 		if (draw_start_x < 0) draw_start_x = 0;
+
+		int draw_end_y = sprite_height / 2 + H / 2;
+		if (draw_end_y >= H) draw_end_y = H - 1;
 		int draw_end_x = sprite_width / 2 + sprite_screen_x;
 		if (draw_end_x >= W) draw_end_x = W - 1;
 
@@ -642,6 +669,7 @@ int main()
 	{
 		VEC(15, 10),
 		0,
+		.5,
 		1,
 		0
 	};
@@ -651,10 +679,10 @@ int main()
 	{
 		update_mouse();
 
-		update_player();
-
 		// sort npcs by distance
 		sort_npcs();
+
+		update_player();
 
 		update_floor();
 
