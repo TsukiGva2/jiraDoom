@@ -96,10 +96,8 @@ struct NPC
 };
 typedef struct NPC NPC;
 int npc_count = 0;
-int npc_heap_size = 0;
 
 NPC  npcs[NPC_CAP]; // actual npc data
-NPC* npc_heap[NPC_CAP];
 NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
 
 // npc id map
@@ -169,7 +167,6 @@ void spawn_npcs()
 
 void log_npcs()
 {
-#ifdef DEBUG_NPC_POSITIONS
 	FOR (i, npc_count)
 	{
 		NPC* npc = npc_list[i];
@@ -179,36 +176,46 @@ void log_npcs()
 	}
 
 	screen_log(W - 400, 50 + (40 * npc_count), 30, "<%f,%f>\n", pos.x, pos.y);
-#endif
 }
 
-inline void swap_heap_npc(int i, int j)
+void _swap_npcs(int i, int j)
 {
-	NPC* t;
-	t=npc_heap[i];
-	npc_heap[i]=npc_heap[j];
-	npc_heap[j]=t;
+	NPC*t=npc_list[i];
+	npc_list[i]=npc_list[j];
+	npc_list[j]=t;
 }
 
-void insert_heap_npc(NPC* n)
+int _partition(int left, int right)
 {
-#define PARENT(i) ((i)/2)
-	int index = npc_heap_size++;
-	npc_heap[index] = n;
+	NPC* pivot = npc_list[left];
 
-	while (index > 0)
+	int i = left;
+
+	FROM (j, left + 1, right)
 	{
-		if (npc_heap[PARENT(index)]->distance > npc_heap[index]->distance)
-			break;
+		if (npc_list[j]->distance > pivot->distance)
+		{
+			i++;
+			_swap_npcs(i, j);
+		}
+	}
 
-        swap_heap_npc(index, PARENT(index));
+	_swap_npcs(left, i);
 
-        index = PARENT(index);
-    }
-#undef PARENT
+	return i;
 }
 
-// heapsort
+void _quick_sort_npcs(int left, int right)
+{
+	if (left < right)
+	{
+		int i = _partition(left, right);
+
+		_quick_sort_npcs(left, i - 1);
+		_quick_sort_npcs(i + 1, right);
+	}
+}
+
 void sort_npcs()
 {
 	if (npc_count <= 0) return;
@@ -217,18 +224,11 @@ void sort_npcs()
 	{
 		npcs[i].distance =
 			vec_dist(npcs[i].pos, pos);
+
+		npc_list[i] = &npcs[i];
 	}
 
-	npc_heap_size = 0;
-
-	FOR (i, npc_count)
-		insert_heap_npc(&npcs[i]);
-
-	FOR (i, npc_heap_size)
-	{
-		NPC* npc = npc_heap[i];
-		npc_list[i] = npc;
-	}
+	_quick_sort_npcs(0, npc_count);
 }
 
 // create a cool fog effect based on distance
