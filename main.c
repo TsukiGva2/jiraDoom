@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-
 typedef uint32_t uint;
 
 #define FOR(I, n) for(uint I=0;I<n;I++)
@@ -64,6 +63,7 @@ scalar mouse_yaw;
 vec    pos;
 vec    dir;
 vec    plane;
+scalar moving_speed = 1.0;
 tex hand_overlay;
 
 // Textures
@@ -114,6 +114,13 @@ NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
 #define IMG_ACRYLIC 1
 
 const char* npc_names[5] = {"", "TAKI", "XYNO", "ACRYLIC", "EEEZOE"};
+
+// Lua
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
+lua_State* Lua;
 
 void spawn_npc(NPC n)
 {
@@ -332,6 +339,38 @@ void init_npcs()
 	spawn_npc(n);
 }
 
+void init_lua()
+{
+	Lua = luaL_newstate();
+
+	luaL_openlibs(Lua);
+
+	BeginDrawing();
+		
+		ClearBackground(BLACK);
+
+		screen_log(0, 0, 30, "Initializing LUA %d", 1);
+
+		if (luaL_loadfile(Lua, "assets/scripts/base.lua") || lua_pcall(Lua, 0, 0, 0))
+		{
+			screen_log(0, H/2, 30, "cannot run configuration file:\n%s",
+					lua_tostring(Lua, -1));
+
+			WaitTime(2);
+		}
+		else
+		{
+			lua_getglobal(Lua, "moving_speed");
+
+			if (lua_isnumber(Lua, -1))
+				moving_speed = (scalar)lua_tonumber(Lua, -1);
+		}
+
+	EndDrawing();
+
+	WaitTime(0.5);
+}
+
 void clean_mic()
 {
 	// TODO: clean up mic lib
@@ -360,6 +399,11 @@ void clean_window()
 	CloseWindow();
 }
 
+void clean_lua()
+{
+	lua_close(Lua);
+}
+
 void update_floor()
 {
 	SetShaderValue(
@@ -382,9 +426,11 @@ void update_npcs()
 	{
 		NPC* npc = npc_list[i];
 
+		scalar dt = GetFrameTime();
+
 		vec delta = {(scalar)GetRandomValue(-1,1), (scalar)GetRandomValue(-1,1)};
 
-		move_entity(&(npc->pos), vec_scale(delta, 0.1), npc->radius);
+		move_entity(&(npc->pos), vec_scale(delta, dt), npc->radius);
 	}
 }
 
@@ -412,7 +458,7 @@ void update_player()
 	plane = vec_rot(plane, -mouse_yaw);
 
 	scalar dt = GetFrameTime();
-	scalar move_speed = 4.0 * dt;
+	scalar move_speed = moving_speed * dt;
 
 	scalar imm_bob_speed = bob_speed;
 
@@ -764,6 +810,8 @@ int main()
 
 	init_npcs();
 
+	init_lua();
+
 	while (!WindowShouldClose())
 	{
 		update_mouse();
@@ -788,6 +836,8 @@ int main()
 
 		EndDrawing();
 	}
+
+	clean_lua();
 
 	clean_mic();
 
