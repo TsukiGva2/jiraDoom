@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+
 typedef uint32_t uint;
 
 #define FOR(I, n) for(uint I=0;I<n;I++)
@@ -122,49 +123,6 @@ void spawn_npc(NPC n)
 	npcs[npc_count++] = n;
 }
 
-void spawn_npcs()
-{
-	NPC n = (NPC) // TAKI
-	{
-		VEC(15, 10),
-		0,
-		.5,
-		IMG_TAKI,
-		NPC_TAKI
-	};
-	spawn_npc(n);
-
-	n = (NPC) // XYNO
-	{
-		VEC(16, 12),
-		0,
-		.5,
-		IMG_XYNO,
-		NPC_XYNO
-	};
-	spawn_npc(n);
-
-	n = (NPC) // ACRYLIC
-	{
-		VEC(15, 13),
-		0,
-		.5,
-		IMG_ACRYLIC,
-		NPC_ACRYLIC
-	};
-	spawn_npc(n);
-
-	n = (NPC) // EEEZOE
-	{
-		VEC(16, 14),
-		0,
-		.5,
-		IMG_EEEZOE,
-		NPC_EEEZOE
-	};
-	spawn_npc(n);
-}
-
 void log_npcs()
 {
 	FOR (i, npc_count)
@@ -259,6 +217,29 @@ void check_npc_collision(vec move_end)
 	}
 }
 
+vec move_entity(vec *pos, vec delta, scalar radius)
+{
+	vec offset = VEC
+	(
+			(delta.x > 0) ? radius : -radius,
+			(delta.y > 0) ? radius : -radius
+	);
+
+	vec move_end = vec_add(vec_add(*pos, delta), offset);
+
+	if (world_at(VEC(move_end.x, pos->y)) == 0)
+	{
+		pos->x += delta.x;
+	}
+
+	if (world_at(VEC(pos->x, move_end.y)) == 0)
+	{
+		pos->y += delta.y;
+	}
+
+	return move_end;
+}
+
 void init_window()
 {
 	InitWindow(W, H, "Jira Doom");
@@ -305,7 +286,50 @@ void init_floor()
 
 void init_npcs()
 {
+	// random seed is the loading time of the game LOL
+	SetRandomSeed(GetTime());
+
 	npc_count = 0;
+
+	NPC n = (NPC) // TAKI
+	{
+		VEC(15, 10),
+		0,
+		.5,
+		IMG_TAKI,
+		NPC_TAKI
+	};
+	spawn_npc(n);
+
+	n = (NPC) // XYNO
+	{
+		VEC(16, 12),
+		0,
+		.5,
+		IMG_XYNO,
+		NPC_XYNO
+	};
+	spawn_npc(n);
+
+	n = (NPC) // ACRYLIC
+	{
+		VEC(15, 13),
+		0,
+		.5,
+		IMG_ACRYLIC,
+		NPC_ACRYLIC
+	};
+	spawn_npc(n);
+
+	n = (NPC) // EEEZOE
+	{
+		VEC(16, 14),
+		0,
+		.5,
+		IMG_EEEZOE,
+		NPC_EEEZOE
+	};
+	spawn_npc(n);
 }
 
 void clean_mic()
@@ -353,6 +377,15 @@ void update_npcs()
 {
 	// sort npcs by distance
 	sort_npcs();
+
+	FOR (i, npc_count)
+	{
+		NPC* npc = npc_list[i];
+
+		vec delta = {(scalar)GetRandomValue(-1,1), (scalar)GetRandomValue(-1,1)};
+
+		move_entity(&(npc->pos), vec_scale(delta, 0.1), npc->radius);
+	}
 }
 
 void update_mouse()
@@ -421,25 +454,9 @@ void update_player()
 
 	if (moved) steps += imm_bob_speed;
 
-	vec offset = VEC
-	(
-			(delta.x > 0) ? player_radius : -player_radius,
-			(delta.y > 0) ? player_radius : -player_radius
-	);
-
-	vec move_end = vec_add(vec_add(pos, delta), offset);
+	vec move_end = move_entity(&pos, delta, player_radius);
 
 	check_npc_collision(move_end);
-
-	if (world_at(VEC(move_end.x, pos.y)) == 0)
-	{
-		pos.x += delta.x;
-	}
-
-	if (world_at(VEC(pos.x, move_end.y)) == 0)
-	{
-		pos.y += delta.y;
-	}
 }
 
 void draw_ui_mic()
@@ -650,7 +667,7 @@ void draw_player()
 
 void draw_npcs()
 {
-	log_npcs();
+	//log_npcs();
 
 	FOR (i, npc_count)
 	{
@@ -745,7 +762,7 @@ int main()
 
 	init_mic();
 
-	spawn_npcs();
+	init_npcs();
 
 	while (!WindowShouldClose())
 	{
