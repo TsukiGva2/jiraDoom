@@ -55,7 +55,7 @@ void main()
         }
     }
 
-	float fog_amount = clamp(row_distance / 15.0, 0.0, 1.0);
+	float fog_amount = clamp(row_distance / 6, 0.0, 1.0);
     vec3 fog_color = vec3(0.0, 0.0, 0.0);
     tex_color.rgb = mix(tex_color.rgb, fog_color, fog_amount);
     

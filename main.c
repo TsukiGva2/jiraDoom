@@ -102,12 +102,84 @@ NPC  npcs[NPC_CAP]; // actual npc data
 NPC* npc_heap[NPC_CAP];
 NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
 
+// npc id map
+#define NPC_TAKI    1
+#define NPC_XYNO    2
+#define NPC_ACRYLIC 3
+#define NPC_EEEZOE  4
+
+// texture indices
+#define IMG_EEEZOE  4
+#define IMG_TAKI    3
+#define IMG_XYNO    2
+#define IMG_ACRYLIC 1
+
+const char* npc_names[5] = {"", "TAKI", "XYNO", "ACRYLIC", "EEEZOE"};
+
 void spawn_npc(NPC n)
 {
 	if (npc_count >= NPC_CAP)
 		return;
 
 	npcs[npc_count++] = n;
+}
+
+void spawn_npcs()
+{
+	NPC n = (NPC) // TAKI
+	{
+		VEC(15, 10),
+		0,
+		.5,
+		IMG_TAKI,
+		NPC_TAKI
+	};
+	spawn_npc(n);
+
+	n = (NPC) // XYNO
+	{
+		VEC(16, 12),
+		0,
+		.5,
+		IMG_XYNO,
+		NPC_XYNO
+	};
+	spawn_npc(n);
+
+	n = (NPC) // ACRYLIC
+	{
+		VEC(15, 13),
+		0,
+		.5,
+		IMG_ACRYLIC,
+		NPC_ACRYLIC
+	};
+	spawn_npc(n);
+
+	n = (NPC) // EEEZOE
+	{
+		VEC(16, 14),
+		0,
+		.5,
+		IMG_EEEZOE,
+		NPC_EEEZOE
+	};
+	spawn_npc(n);
+}
+
+void log_npcs()
+{
+#ifdef DEBUG_NPC_POSITIONS
+	FOR (i, npc_count)
+	{
+		NPC* npc = npc_list[i];
+
+		screen_log(W - 400, 50 + (40 * i), 30, "%s, %f <%d,%d>\n", npc_names[npc->npc_id],
+				npc->distance, (int)npc->pos.x, (int)npc->pos.y);
+	}
+
+	screen_log(W - 400, 50 + (40 * npc_count), 30, "<%f,%f>\n", pos.x, pos.y);
+#endif
 }
 
 inline void swap_heap_npc(int i, int j)
@@ -120,7 +192,7 @@ inline void swap_heap_npc(int i, int j)
 
 void insert_heap_npc(NPC* n)
 {
-#define PARENT(i) ((i - 1)/2)
+#define PARENT(i) ((i)/2)
 	int index = npc_heap_size++;
 	npc_heap[index] = n;
 
@@ -136,34 +208,35 @@ void insert_heap_npc(NPC* n)
 #undef PARENT
 }
 
-NPC* pop_heap_npc()
-{
-	if (npc_heap_size < 0) return NULL;
-	return npc_heap[npc_heap_size--];
-}
-
 // heapsort
 void sort_npcs()
 {
 	if (npc_count <= 0) return;
 
 	FOR (i, npc_count)
+	{
 		npcs[i].distance =
 			vec_dist(npcs[i].pos, pos);
+	}
 
 	npc_heap_size = 0;
 
 	FOR (i, npc_count)
 		insert_heap_npc(&npcs[i]);
 
-	npc_heap_size--;
-
-	NPC* n;
-	int i = 0;
-	while ((n = pop_heap_npc()) != NULL)
+	FOR (i, npc_heap_size)
 	{
-		npc_list[i++] = n;
+		NPC* npc = npc_heap[i];
+		npc_list[i] = npc;
 	}
+}
+
+// create a cool fog effect based on distance
+inline Color fogify(scalar distance, scalar rate)
+{
+	int level = 255 / Clamp(distance * rate, 1, 255);
+
+	return (Color){level, level, level, 255};
 }
 
 inline int world_at(vec spot)
@@ -276,6 +349,12 @@ void update_floor()
 			floor_mic_state_loc, &mic_state, SHADER_UNIFORM_INT);
 }
 
+void update_npcs()
+{
+	// sort npcs by distance
+	sort_npcs();
+}
+
 void update_mouse()
 {
 	vec mouse_pos = GetMousePosition();
@@ -349,9 +428,6 @@ void update_player()
 	);
 
 	vec move_end = vec_add(vec_add(pos, delta), offset);
-
-	int move_x = 0;
-	int move_y = 0;
 
 	check_npc_collision(move_end);
 
@@ -560,7 +636,7 @@ void draw_player()
 						source,
 						dest,
 						VEC(0,0),
-						0, WHITE
+						0, fogify(perp_wall_dist, 1)
 				);
 
 				wall_distances[x] = perp_wall_dist;
@@ -571,8 +647,11 @@ void draw_player()
 	}
 }
 
+
 void draw_npcs()
 {
+	log_npcs();
+
 	FOR (i, npc_count)
 	{
 		NPC* npc = npc_list[i];
@@ -635,13 +714,14 @@ void draw_npcs()
 				(draw_end_y - draw_start_y)
 			};
 
+
 			DrawTexturePro(
 				npc_texture_map,
 				source,
 				dest,
 				VEC(0,0),
 				0,
-				WHITE
+				fogify(npc->distance, 0.5)
 			);
 		}
 	}
@@ -665,22 +745,13 @@ int main()
 
 	init_mic();
 
-	NPC n = (NPC)
-	{
-		VEC(15, 10),
-		0,
-		.5,
-		1,
-		0
-	};
-	spawn_npc(n);
+	spawn_npcs();
 
 	while (!WindowShouldClose())
 	{
 		update_mouse();
 
-		// sort npcs by distance
-		sort_npcs();
+		update_npcs();
 
 		update_player();
 
