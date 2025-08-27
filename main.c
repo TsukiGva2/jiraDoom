@@ -89,11 +89,10 @@ tex npc_texture_map;
 #define NPC_CAP 20
 struct NPC
 {
-	vec   pos;
+	vec    pos;
 	scalar distance;
 	scalar radius;
 	int    texture_id;
-	int    npc_id;
 };
 typedef struct NPC NPC;
 int npc_count = 0;
@@ -101,19 +100,8 @@ int npc_count = 0;
 NPC  npcs[NPC_CAP]; // actual npc data
 NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
 
-// npc id map
-#define NPC_TAKI    1
-#define NPC_XYNO    2
-#define NPC_ACRYLIC 3
-#define NPC_EEEZOE  4
-
-// texture indices
-#define IMG_EEEZOE  4
-#define IMG_TAKI    3
-#define IMG_XYNO    2
-#define IMG_ACRYLIC 1
-
-const char* npc_names[5] = {"", "TAKI", "XYNO", "ACRYLIC", "EEEZOE"};
+#define DEF_LUA(L,S,n,v) \
+		(lua_push ##S (L, v), lua_setglobal(L, n))
 
 // Lua
 #include <lua.h>
@@ -132,15 +120,6 @@ void spawn_npc(NPC n)
 
 void log_npcs()
 {
-	FOR (i, npc_count)
-	{
-		NPC* npc = npc_list[i];
-
-		screen_log(W - 400, 50 + (40 * i), 30, "%s, %f <%d,%d>\n", npc_names[npc->npc_id],
-				npc->distance, (int)npc->pos.x, (int)npc->pos.y);
-	}
-
-	screen_log(W - 400, 50 + (40 * npc_count), 30, "<%f,%f>\n", pos.x, pos.y);
 }
 
 void _swap_npcs(int i, int j)
@@ -247,6 +226,77 @@ vec move_entity(vec *pos, vec delta, scalar radius)
 	return move_end;
 }
 
+// scripting API
+static int _spawn_npc_wrapper(lua_State* L)
+{
+	int a = lua_gettop(L);
+
+	if (a != 4)
+	{
+	   lua_pushliteral(L, "incorrect arg count");
+	   lua_error(L);
+	   return 0;
+	}
+
+	FROM (i, 1, 4 + 1)
+	{
+		if (!lua_isnumber(L, i))
+		{
+		   lua_pushliteral(L, "incorrect argument");
+           lua_error(L);
+		   return 0;
+		}
+	}
+
+	NPC n = (NPC)
+	{
+		VEC
+		(
+			(scalar)lua_tonumber(L, 1),
+			(scalar)lua_tonumber(L, 2)
+		),
+		0,
+		(scalar)lua_tonumber(L, 3),
+		lua_tointeger(L, 4)
+	};
+
+	spawn_npc(n);
+
+	return 0;
+}
+
+void _setup_game_api(lua_State* L)
+{
+	lua_register(L, "spawn", _spawn_npc_wrapper);
+
+	DEF_LUA(L, number, "img_ACRYLIC", 1);
+	DEF_LUA(L, number, "img_XYNO",    2);
+	DEF_LUA(L, number, "img_TAKI",    3);
+	DEF_LUA(L, number, "img_EEEZOE",  4);
+}
+
+lua_State* load_lua(const char* filename)
+{
+	static int loaded_files = 0;
+
+	lua_State* L = luaL_newstate();
+	luaL_openlibs(L);
+
+	_setup_game_api(L);
+
+	if (luaL_loadfile(L, filename) || lua_pcall(L, 0, 0, 0))
+	{
+		BeginDrawing();
+		ClearBackground(BLACK);
+			screen_log(0, (H/2) + (loaded_files * 30), 10, "cannot run configuration file:\n%s",
+					lua_tostring(L, -1));
+		EndDrawing();
+		WaitTime(2);
+	}
+
+	return L;
+}
+
 void init_window()
 {
 	InitWindow(W, H, "Jira Doom");
@@ -293,82 +343,37 @@ void init_floor()
 
 void init_npcs()
 {
-	// random seed is the loading time of the game LOL
-	SetRandomSeed(GetTime());
-
 	npc_count = 0;
-
-	NPC n = (NPC) // TAKI
-	{
-		VEC(15, 10),
-		0,
-		.5,
-		IMG_TAKI,
-		NPC_TAKI
-	};
-	spawn_npc(n);
-
-	n = (NPC) // XYNO
-	{
-		VEC(16, 12),
-		0,
-		.5,
-		IMG_XYNO,
-		NPC_XYNO
-	};
-	spawn_npc(n);
-
-	n = (NPC) // ACRYLIC
-	{
-		VEC(15, 13),
-		0,
-		.5,
-		IMG_ACRYLIC,
-		NPC_ACRYLIC
-	};
-	spawn_npc(n);
-
-	n = (NPC) // EEEZOE
-	{
-		VEC(16, 14),
-		0,
-		.5,
-		IMG_EEEZOE,
-		NPC_EEEZOE
-	};
-	spawn_npc(n);
 }
 
 void init_lua()
 {
-	Lua = luaL_newstate();
+	lua_State* L = load_lua("assets/scripts/base.lua");
+	if (L)
+	{
+		lua_getglobal(L, "moving_speed");
+		if (lua_isnumber(L, -1))
+			moving_speed = (scalar)lua_tonumber(L, -1);
 
-	luaL_openlibs(Lua);
+		lua_close(L);
+	}
 
-	BeginDrawing();
-		
-		ClearBackground(BLACK);
+	L = load_lua("assets/scripts/npc.lua");
+	if (L)
+	{
+		lua_close(L);
+	}
 
-		screen_log(0, 0, 30, "Initializing LUA %d", 1);
-
-		if (luaL_loadfile(Lua, "assets/scripts/base.lua") || lua_pcall(Lua, 0, 0, 0))
-		{
-			screen_log(0, H/2, 30, "cannot run configuration file:\n%s",
-					lua_tostring(Lua, -1));
-
-			WaitTime(2);
-		}
-		else
-		{
-			lua_getglobal(Lua, "moving_speed");
-
-			if (lua_isnumber(Lua, -1))
-				moving_speed = (scalar)lua_tonumber(Lua, -1);
-		}
-
-	EndDrawing();
-
-	WaitTime(0.5);
+	/*
+	lua_getglobal(L, "f");
+	lua_pushliteral(L, "how");
+	lua_getglobal(L, "t");
+	lua_getfield(L, -1, "x");
+	lua_remove(L, -2);
+	lua_pushinteger(L, 14);
+	lua_call(L, 3, 1);
+	lua_setglobal(L, "a");
+	*/
 }
 
 void clean_mic()
