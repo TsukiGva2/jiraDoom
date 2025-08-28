@@ -6,9 +6,9 @@
 
 typedef uint32_t uint;
 
+#define MIN(x, y) ((x)<(y)?(x):(y))
 #define FOR(I, n) for(uint I=0;I<n;I++)
 #define FROM(I, v, n) for(uint I=v;I<n;I++)
-#define MIN(x,y) ((x)<(y)?(x):(y))
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -64,6 +64,7 @@ vec    pos;
 vec    dir;
 vec    plane;
 scalar moving_speed = 1.0;
+scalar sensitivity = 0.003;
 tex hand_overlay;
 
 // Textures
@@ -100,27 +101,15 @@ int npc_count = 0;
 NPC  npcs[NPC_CAP]; // actual npc data
 NPC* npc_list[NPC_CAP]; // sorted npcs (starts from closest)
 
-#define DEF_LUA(L,S,n,v) \
-		(lua_push ##S (L, v), lua_setglobal(L, n))
-
 // Lua
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
+#define DEF_LUA(L,S,n,v) \
+		(lua_push ##S (L, v), lua_setglobal(L, n))
+
 lua_State* Lua;
-
-void spawn_npc(NPC n)
-{
-	if (npc_count >= NPC_CAP)
-		return;
-
-	npcs[npc_count++] = n;
-}
-
-void log_npcs()
-{
-}
 
 void _swap_npcs(int i, int j)
 {
@@ -175,19 +164,6 @@ void sort_npcs()
 	_quick_sort_npcs(0, npc_count);
 }
 
-// create a cool fog effect based on distance
-inline Color fogify(scalar distance, scalar rate)
-{
-	int level = 255 / Clamp(distance * rate, 1, 255);
-
-	return (Color){level, level, level, 255};
-}
-
-inline int world_at(vec spot)
-{
-	return world_map[(int)spot.x][(int)spot.y];
-}
-
 void check_npc_collision(vec move_end)
 {
 	FOR (i, npc_count)
@@ -203,27 +179,12 @@ void check_npc_collision(vec move_end)
 	}
 }
 
-vec move_entity(vec *pos, vec delta, scalar radius)
+void spawn_npc(NPC n)
 {
-	vec offset = VEC
-	(
-			(delta.x > 0) ? radius : -radius,
-			(delta.y > 0) ? radius : -radius
-	);
+	if (npc_count >= NPC_CAP)
+		return;
 
-	vec move_end = vec_add(vec_add(*pos, delta), offset);
-
-	if (world_at(VEC(move_end.x, pos->y)) == 0)
-	{
-		pos->x += delta.x;
-	}
-
-	if (world_at(VEC(pos->x, move_end.y)) == 0)
-	{
-		pos->y += delta.y;
-	}
-
-	return move_end;
+	npcs[npc_count++] = n;
 }
 
 // scripting API
@@ -270,9 +231,9 @@ void _setup_game_api(lua_State* L)
 	lua_register(L, "spawn", _spawn_npc_wrapper);
 
 	DEF_LUA(L, number, "img_ACRYLIC", 1);
-	DEF_LUA(L, number, "img_XYNO",    2);
-	DEF_LUA(L, number, "img_TAKI",    3);
-	DEF_LUA(L, number, "img_EEEZOE",  4);
+	DEF_LUA(L, number, "img_XYNO"   , 2);
+	DEF_LUA(L, number, "img_TAKI"   , 3);
+	DEF_LUA(L, number, "img_EEEZOE" , 4);
 }
 
 lua_State* load_lua(const char* filename)
@@ -288,13 +249,53 @@ lua_State* load_lua(const char* filename)
 	{
 		BeginDrawing();
 		ClearBackground(BLACK);
-			screen_log(0, (H/2) + (loaded_files * 30), 10, "cannot run configuration file:\n%s",
+			screen_log(0, loaded_files * 30, 10, "cannot run configuration file:\n%s",
 					lua_tostring(L, -1));
 		EndDrawing();
 		WaitTime(2);
 	}
 
+	loaded_files++;
+
 	return L;
+}
+
+// Utils
+
+// create a cool fog effect based on distance
+inline Color fogify(scalar distance, scalar rate)
+{
+	int level = 255 / Clamp(distance * rate, 1, 255);
+
+	return (Color){level, level, level, 255};
+}
+
+inline int world_at(vec spot)
+{
+	return world_map[(int)spot.x][(int)spot.y];
+}
+
+vec move_entity(vec *pos, vec delta, scalar radius)
+{
+	vec offset = VEC
+	(
+			(delta.x > 0) ? radius : -radius,
+			(delta.y > 0) ? radius : -radius
+	);
+
+	vec move_end = vec_add(vec_add(*pos, delta), offset);
+
+	if (world_at(VEC(move_end.x, pos->y)) == 0)
+	{
+		pos->x += delta.x;
+	}
+
+	if (world_at(VEC(pos->x, move_end.y)) == 0)
+	{
+		pos->y += delta.y;
+	}
+
+	return move_end;
 }
 
 void init_window()
@@ -309,7 +310,8 @@ void init_textures()
 {
 	mic_ui          = LoadTexture("assets/mic_ui.png");
 	texture_map     = LoadTexture("assets/walltext.png");
-	hand_overlay    = LoadTexture("assets/hand_overlay.png");
+	//hand_overlay    = LoadTexture("assets/hand_overlay.png");
+	hand_overlay    = LoadTexture("assets/envelope_overlay.png");
 	npc_texture_map = LoadTexture("assets/mobtex.png");
 }
 
@@ -355,6 +357,10 @@ void init_lua()
 		if (lua_isnumber(L, -1))
 			moving_speed = (scalar)lua_tonumber(L, -1);
 
+		lua_getglobal(L, "sensitivity");
+		if (lua_isnumber(L, -1))
+			sensitivity = (scalar)lua_tonumber(L, -1);
+
 		lua_close(L);
 	}
 
@@ -363,17 +369,6 @@ void init_lua()
 	{
 		lua_close(L);
 	}
-
-	/*
-	lua_getglobal(L, "f");
-	lua_pushliteral(L, "how");
-	lua_getglobal(L, "t");
-	lua_getfield(L, -1, "x");
-	lua_remove(L, -2);
-	lua_pushinteger(L, 14);
-	lua_call(L, 3, 1);
-	lua_setglobal(L, "a");
-	*/
 }
 
 void clean_mic()
@@ -441,12 +436,13 @@ void update_npcs()
 
 void update_mouse()
 {
+	scalar dt = GetFrameTime();
+
 	vec mouse_pos = GetMousePosition();
 
 	scalar delta_x = mouse_pos.x - W / 2;
-	scalar sensitivity = 0.003;
 
-	mouse_yaw = delta_x * sensitivity;
+	mouse_yaw = delta_x * sensitivity * dt;
 
 	SetMousePosition(W / 2, H / 2);
 }
@@ -718,8 +714,6 @@ void draw_player()
 
 void draw_npcs()
 {
-	//log_npcs();
-
 	FOR (i, npc_count)
 	{
 		NPC* npc = npc_list[i];
